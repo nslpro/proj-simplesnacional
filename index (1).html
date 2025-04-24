@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Simples Nacional - Últimos 12 Meses</title>
+  <style>
+    body { font-family: Arial, sans-serif; background: #f4f4f4; padding: 20px; }
+    .container { max-width: 900px; margin: auto; background: #fff; padding: 20px; border-radius: 10px; box-shadow: 0 0 10px #ccc; }
+    h1 { text-align: center; color: #2d89ef; }
+    input { padding: 6px; margin: 5px 0; width: 100%; box-sizing: border-box; }
+    button { background: #2d89ef; color: white; padding: 10px 15px; border: none; border-radius: 5px; cursor: pointer; margin-top: 10px; }
+    table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+    th, td { border: 1px solid #ccc; padding: 8px; text-align: left; }
+    th { background-color: #eee; }
+    .mes-container { margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #ccc; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Notas Fiscais - Últimos 12 Meses</h1>
+    <div id="meses-container"></div>
+    <button onclick="calcular()">Calcular DAS</button>
+    <div id="resultado"></div>
+  </div>
+  <script>
+    const nomesMeses = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+    const container = document.getElementById("meses-container");
+    const hoje = new Date();
+    const meses = [];
+
+    for (let i = 11; i >= 0; i--) {
+      const data = new Date(hoje.getFullYear(), hoje.getMonth() - i, 1);
+      const nome = `${nomesMeses[data.getMonth()]} de ${data.getFullYear()}`;
+      const id = `mes-${i}`;
+      meses.push({ id, nome });
+    }
+
+    meses.forEach(mes => {
+      const div = document.createElement("div");
+      div.className = "mes-container";
+      div.innerHTML = `<h3>${mes.nome}</h3><div id="${mes.id}"></div>
+        <button onclick="adicionarNota('${mes.id}')">+ Adicionar Nota</button>`;
+      container.appendChild(div);
+      adicionarNota(mes.id);
+    });
+
+    function adicionarNota(id) {
+      const div = document.getElementById(id);
+      const input = document.createElement("input");
+      input.type = "text";
+      input.placeholder = "Ex: 2.000,00";
+      div.appendChild(input);
+    }
+
+    function parseValor(valor) {
+      return parseFloat(valor.replace(/\./g, '').replace(',', '.')) || 0;
+    }
+
+    function formatar(valor) {
+      return valor.toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+    }
+
+    const faixas = [
+      { limite: 180000, aliquota: 0.06, deducao: 0 },
+      { limite: 360000, aliquota: 0.112, deducao: 9360 },
+      { limite: 720000, aliquota: 0.135, deducao: 17640 },
+      { limite: 1800000, aliquota: 0.16, deducao: 35640 },
+      { limite: 3600000, aliquota: 0.21, deducao: 125640 },
+      { limite: 4800000, aliquota: 0.33, deducao: 648000 }
+    ];
+
+    const distribuicao = [
+      { nome: "IRPJ", perc: 0.04 },
+      { nome: "CSLL", perc: 0.035 },
+      { nome: "Cofins", perc: 0.1274 },
+      { nome: "PIS/Pasep", perc: 0.0276 },
+      { nome: "INSS", perc: 0.42 },
+      { nome: "ISS (SP)", perc: 0.35 }
+    ];
+
+    function calcular() {
+      let receitaTotal = 0;
+      let receitaUltimoMes = 0;
+
+      meses.forEach((mes, i) => {
+        const inputs = document.querySelectorAll(`#${mes.id} input`);
+        let somaMes = 0;
+        inputs.forEach(input => somaMes += parseValor(input.value));
+        receitaTotal += somaMes;
+        if (i === meses.length - 2) receitaUltimoMes = somaMes; // mês anterior
+      });
+
+      const resultado = document.getElementById("resultado");
+
+      if (receitaTotal === 0 || receitaUltimoMes === 0) {
+        resultado.innerHTML = "<p style='color:red;'>Preencha valores válidos. O mês anterior precisa conter notas fiscais para o cálculo da DAS.</p>";
+        return;
+      }
+
+      const faixa = faixas.find(f => receitaTotal <= f.limite) || faixas[faixas.length - 1];
+      const valorAnual = receitaTotal * faixa.aliquota - faixa.deducao;
+      const aliqEfetiva = valorAnual / receitaTotal;
+      const dasMensal = receitaUltimoMes * aliqEfetiva;
+
+      const mesVencimento = new Date();
+      const nomesPT = ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"];
+      const mesNome = nomesPT[mesVencimento.getMonth()];
+      const vencimento = `${mesNome} de ${mesVencimento.getFullYear()}`;
+
+      let html = `
+        <p><strong>Receita dos últimos 12 meses:</strong> ${formatar(receitaTotal)}</p>
+        <p><strong>Receita considerada (mês anterior):</strong> ${formatar(receitaUltimoMes)}</p>
+        <p><strong>Alíquota efetiva:</strong> ${(aliqEfetiva * 100).toFixed(2)}%</p>
+        <p><strong>DAS estimada:</strong> ${formatar(dasMensal)}<br>
+        <strong>Vencimento no mês:</strong> ${vencimento}</p>
+        <h3>DAS Estimada por Mês (últimos 12 meses):</h3>
+        <table>
+          <tr><th>Mês</th><th>Receita</th><th>DAS Estimada</th></tr>
+          <tbody id="tabela-mensal"></tbody>
+        </table>
+        <h3>Distribuição dos Tributos</h3>
+        <table><tr><th>Tributo</th><th>%</th><th>Valor</th></tr>`;
+      distribuicao.forEach(t => {
+        const valor = dasMensal * t.perc;
+        html += `<tr><td>${t.nome}</td><td>${(t.perc * 100).toFixed(2)}%</td><td>${formatar(valor)}</td></tr>`;
+      });
+      html += "</table>";
+      resultado.innerHTML = html;
+
+      // Preencher a tabela mensal
+      let tabelaMensal = "";
+      meses.forEach((mes, i) => {
+        const inputs = document.querySelectorAll(`#${mes.id} input`);
+        let somaMes = 0;
+        inputs.forEach(input => somaMes += parseValor(input.value));
+        const dasMes = somaMes * aliqEfetiva;
+        tabelaMensal += `
+          <tr>
+            <td>${mes.nome}</td>
+            <td>${formatar(somaMes)}</td>
+            <td>${formatar(dasMes)}</td>
+          </tr>`;
+      });
+      document.getElementById("tabela-mensal").innerHTML = tabelaMensal;
+    }
+  </script>
+</body>
+</html>
